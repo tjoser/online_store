@@ -1,309 +1,210 @@
-import { StyleSheet, Text, View, ActivityIndicator, FlatList, Image, TouchableOpacity } from 'react-native'
-import React, {useState, useEffect} from 'react'
-import axios from 'axios'
+import React, { useState, useEffect } from 'react';
+import { View, Text, FlatList, Image, ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {firebase , auth } from '../../firebase'
-
-
-
-
+import axios from 'axios';
+import { firebase, auth } from '../../firebase';
 
 const Main = () => {
-
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    setLoading(true);
+    axios
+      .get('https://fakestoreapi.com/products')
+      .then((res) => {
+        setProducts(res.data);
+      })
+      .catch((e) => console.log(e))
+      .finally(() => setLoading(false));
+  }, []);
 
-  useEffect(() => { 
-    setLoading[true];
-    axios.get('https://fakestoreapi.com/products').then(res=>{
-    setProducts(res.data)
-    })
-    .catch(e => console.log(e))
-    .finally(() => setLoading(false));
-  });
+  const [favorites, setFavorites] = useState([]);
+  const [cart, setCart] = useState([]);
 
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (user) {
+      const userDocRef = firebase.firestore().collection('users').doc(user.email);
+      const unsubscribe = userDocRef.onSnapshot((snapshot) => {
+        const data = snapshot.data();
+        if (data) {
+          setFavorites(data.fav || []);
+          setCart(data.cart || []);
+        }
+      });
 
-  const renderItem = ({item}) => {
+      return () => {
+        unsubscribe();
+      };
+    }
+  }, []);
+
+  const isProductInFavorites = (productId) => {
+    return favorites.includes(productId);
+  };
+
+  const isProductInCart = (productId) => {
+    return cart.includes(productId);
+  };
+
+  const toggleFavorites = async (productId) => {
+    try {
+      const user = auth.currentUser;
+      if (user) {
+        const userDocRef = firebase.firestore().collection('users').doc(user.email);
+        const userDoc = await userDocRef.get();
+        const currentFavorites = userDoc.data()?.fav || [];
+
+        if (currentFavorites.includes(productId)) {
+          const updatedFavorites = currentFavorites.filter((id) => id !== productId);
+          await userDocRef.update({ fav: updatedFavorites });
+          setFavorites(updatedFavorites);
+        } else {
+          currentFavorites.push(productId);
+          await userDocRef.update({ fav: currentFavorites });
+          setFavorites(currentFavorites);
+        }
+      }
+    } catch (error) {
+      console.error('Error updating favorites:', error);
+    }
+  };
+
+  const toggleCart = async (productId) => {
+    try {
+      const user = auth.currentUser;
+      if (user) {
+        const userDocRef = firebase.firestore().collection('users').doc(user.email);
+        const userDoc = await userDocRef.get();
+        const currentCart = userDoc.data()?.cart || [];
+
+        if (currentCart.includes(productId)) {
+          const updatedCart = currentCart.filter((id) => id !== productId);
+          await userDocRef.update({ cart: updatedCart });
+          setCart(updatedCart);
+        } else {
+          currentCart.push(productId);
+          await userDocRef.update({ cart: currentCart });
+          setCart(currentCart);
+        }
+      }
+    } catch (error) {
+      console.error('Error updating cart:', error);
+    }
+  };
+
+  const renderItem = ({ item }) => {
     const isFavorite = isProductInFavorites(item.id);
     const isCarted = isProductInCart(item.id);
 
-    const toggleFavorites = isFavorite ? removeFromFavorites : addToFavorites;
-    const toggleCart = isCarted ? removeFromCart : addToCart;
-
-    const favoritesText = isFavorite ? 'Remove from Favorites' : 'Add to Favorites';
-    const cartText = isCarted ? 'Remove from Cart' : 'Add to Cart';
+    const toggleFavoritesText = isFavorite ? 'Remove from Favorites' : 'Add to Favorites';
+    const toggleCartText = isCarted ? 'Remove from Cart' : 'Add to Cart';
 
     return (
-
-    <View style={styles.wrapper}>
-      <View style={styles.ImageAndButtonwrapper}>
-      
-        <View style={styles.Imagewrapper} >
-          <Image source={{uri: item.image}} style={styles.image} />
+      <View style={styles.card}>
+        <View style={styles.imageWrapper}>
+          <Image source={{ uri: item.image }} style={styles.image} />
         </View>
-        <View>
-          <TouchableOpacity style={styles.addButtonFav} >
-            <Text  style={styles.addButtonText}
-                   onPress={() => toggleFavorites(item.id)}
-                    >
-            
-            {favoritesText}
-            </Text>
+        <View style={styles.content}>
+          <Text style={styles.title}>{item.title}</Text>
+          <Text style={styles.description}>{item.description}</Text>
+          <Text style={styles.price}>{item.price} TL</Text>
+          <TouchableOpacity style={styles.favoriteButton} onPress={() => toggleFavorites(item.id)}>
+            <Text style={styles.favoriteButtonText}>{toggleFavoritesText}</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity style={styles.addButtonCart} >
-            <Text  style={styles.addButtonText}
-                   onPress={() => toggleCart(item.id)}
-                    >
-            
-            {cartText}            </Text>
+          <TouchableOpacity style={styles.cartButton} onPress={() => toggleCart(item.id)}>
+            <Text style={styles.cartButtonText}>{toggleCartText}</Text>
           </TouchableOpacity>
-
-
         </View>
-        </View>
-        <View style={styles.Textwrapper} >
-           <Text style={styles.text}>{item.title}</Text>
-           <Text style={styles.text}>{item.description}</Text>
-           <Text style={styles.text}>{item.price} TL</Text>
-
-        </View>
-    </View>
-  )}
-
-  const addToFavorites = async (productId) => {
-    try {
-      const user = auth.currentUser;
-      if (user) {
-        const userDocRef = firebase.firestore().collection('users').doc(user.email);
-  
-        // Get the current favorites array
-        const userDoc = await userDocRef.get();
-        const currentFavorites = userDoc.data().fav || [];
-  
-        // Check if the product ID is not already in the favorites
-        if (!currentFavorites.includes(productId)) {
-          currentFavorites.push(productId);
-  
-          // Update the Firestore document with the updated favorites array
-          await userDocRef.update({ fav: currentFavorites });
-  
-          alert('Product added to favorites!');
-        } else {
-          alert('Product is already in favorites.');
-        }
-      } else {
-        alert('User not authenticated.');
-      }
-    } catch (error) {
-      console.error('Error adding product to favorites:', error);
-    }
+      </View>
+    );
   };
-  
-
-  const isProductInFavorites = async (productId) => {
-    const user = auth.currentUser;
-    if (user) {
-      const userDocRef = firebase.firestore().collection('users').doc(user.email);
-      const userDoc = await userDocRef.get();
-      const currentFavorites = userDoc.data().fav || []; 
-      console.log(currentFavorites.includes(productId));
-      return currentFavorites.includes(productId);
-    }
-    return false;
-  };
-
-
-  const isProductInCart = async (productId) => {
-    const user = auth.currentUser;
-    if (user) {
-      const userDocRef = firebase.firestore().collection('users').doc(user.email);
-      const userDoc = await userDocRef.get();
-      const currentCart = userDoc.data().cart || []; 
-      return currentCart.includes(productId);
-    }
-    return false;
-  };
-
-
-  const addToCart = async (productId) => {
-    try {
-      const user = auth.currentUser;
-      if (user) {
-        const userDocRef = firebase.firestore().collection('users').doc(user.email);
-          const userDoc = await userDocRef.get();
-        const currentCart = userDoc.data().cart || [];
-  
-        // Check if the product ID is not already in the favorites
-        if (!currentCart.includes(productId)) {
-          currentCart.push(productId);
-  
-          // Update the Firestore document with the updated favorites array
-          await userDocRef.update({ cart: currentCart });
-  
-          alert('Product added to cart!');
-        } else {
-          alert('Product is already in cart.');
-        }
-      } else {
-        alert('User not authenticated.');
-      }
-    } catch (error) {
-      console.error('Error adding product to favorites:', error);
-    }
-  };
-
-
-
-
-  
-  const removeFromFavorites = async (productId) => {
-    try {
-      const user = auth.currentUser;
-      if (user) {
-        const userDocRef = firebase.firestore().collection('users').doc(user.email);
-
-        // Get the current favorites array
-        const userDoc = await userDocRef.get();
-        const currentFavorites = userDoc.data().fav || [];
-
-        // Check if the product ID is in the favorites
-        const index = currentFavorites.indexOf(productId);
-        if (index !== -1) {
-          currentFavorites.splice(index, 1);
-
-          // Update the Firestore document with the updated favorites array
-          await userDocRef.update({ fav: currentFavorites });
-
-          alert('Product removed from favorites!');
-        } else {
-          alert('Product is not in favorites.');
-        }
-      } else {
-        alert('User not authenticated.');
-      }
-    } catch (error) {
-      console.error('Error removing product from favorites:', error);
-    }
-  };
-
-
-
-
-  const removeFromCart = async (productId) => {
-    try {
-      const user = auth.currentUser;
-      if (user) {
-        const userDocRef = firebase.firestore().collection('users').doc(user.email);
-
-        // Get the current cart array
-        const userDoc = await userDocRef.get();
-        const currentCart = userDoc.data().cart || [];
-
-        // Check if the product ID is in the cart
-        const index = currentCart.indexOf(productId);
-        if (index !== -1) {
-          currentCart.splice(index, 1);
-
-          await userDocRef.update({ fav: currentCart });
-
-          alert('Product removed from cart!');
-        } else {
-          alert('Product is not in cart.');
-        }
-      } else {
-        alert('User not authenticated.');
-      }
-    } catch (error) {
-      console.error('Error removing product from cart:', error);
-    }
-  };
-
 
   return (
-        <SafeAreaView style={styles.root}>
-          {loading ? 
-          <View style={styles.loadingContainer}>
-
-              <ActivityIndicator size={"large"} color={"#000"}/>
-                
-          </View>
-          :   
-          <FlatList data={products}
-          keyExtractor={element => element.id}
-          renderItem={renderItem}
-          />} 
-        </SafeAreaView>  
-        )
-}
-
-export default Main
+    <SafeAreaView style={styles.container}>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#000" />
+        </View>
+      ) : (
+        <FlatList data={products} keyExtractor={(element) => element.id.toString()} renderItem={renderItem} />
+      )}
+    </SafeAreaView>
+  );
+};
 
 const styles = StyleSheet.create({
-  root:{
-    flex:1,
-    padding:5,
-    backgroundColor:"#ffffff"
+  container: {
+    flex: 1,
+    padding: 16,
+    backgroundColor: '#f5f5f5',
   },
-  loadingContainer:{
-    alignItems: "center",
-    justifyContent: "center",
-    flex:1
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  image:{
-    width:150,
-    height:150,
-    resizeMode: 'contain',
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 16,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    elevation: 2,
+  },
+  imageWrapper: {
+    flex: 1,
+  },
+  image: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 8,
+  },
+  content: {
+    flex: 2,
+    marginLeft: 16,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  description: {
+    fontSize: 16,
+    marginBottom: 8,
+  },
+  price: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  favoriteButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  cartButton: {
+    backgroundColor: '#F44336',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  favoriteButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  cartButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+});
 
-  },
-  text:{
-    marginVertical:5
-  },
-  wrapper:{
-    alignItems:"center",
-    flexDirection:"row",
-    justifyContent:"center", 
-    marginVertical:20,
-    borderWidth:1,
-    borderColor: "#dedede",
-    padding:10
-  },
-  Imagewrapper:{
-    flex:1,
-    alignItems:"center",
-    justifyContent:"center", 
-  },
-  Textwrapper:{
-    flex:1
-  },
-  ImageAndButtonwrapper:{
-    flex:1,
-    alignItems:"center",
-    justifyContent:"center", 
-  },
-  addButtonFav:{
-   marginVertical:10,
-   backgroundColor:"blue",
-   padding:10,
-   alignItems:"center",
-    justifyContent:"center", 
-  },
-  addButtonCart:{
-    marginVertical:10,
-    backgroundColor:"red",
-    padding:10,
-    alignItems:"center",
-     justifyContent:"center", 
-   },
-  addButtonText:{
-    fontSize:19,
-    color:"#ffffffff",
-    alignItems:"center",
-    justifyContent:"center", 
-   },
-
-
-
-  
-})
+export default Main;
