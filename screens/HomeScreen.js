@@ -1,25 +1,46 @@
-import { useNavigation } from '@react-navigation/core'
-import React from 'react'
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
-import { auth } from '../firebase'
+import React, { useEffect, useState } from 'react';
 import { createMaterialBottomTabNavigator } from '@react-navigation/material-bottom-tabs';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import cart from './tabs/cart';
-import Categories from './tabs/categories';
+import { auth, firebase } from '../firebase';
+import { View, Text, StyleSheet } from 'react-native';
 import Main from './tabs/main';
+import Categories from './tabs/categories';
 import Fav from './tabs/fav';
+import Cart from './tabs/cart';
+import UsersTab from './tabs/userstab';
+import UpdateProductTab from './tabs/updateproducttab';
 
 const Tab = createMaterialBottomTabNavigator();
 
-
 const HomeScreen = () => {
-  
+  const [userRole, setUserRole] = useState(null);
+
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (user) {
+      const userDocRef = firebase.firestore().collection('users').doc(user.email);
+
+      userDocRef
+        .get()
+        .then((doc) => {
+          if (doc.exists) {
+            const userData = doc.data();
+            if (userData && userData.mode) {
+              setUserRole(userData.mode);
+            }
+          }
+        })
+        .catch((error) => {
+          console.error('Error getting user role:', error);
+        });
+    }
+  }, []);
 
   return (
     <Tab.Navigator
       initialRouteName="Feed"
-      activeColor="#fff"
-      barStyle={{ backgroundColor: 'blue' }}
+      activeColor="#ffffff"
+      barStyle={{ backgroundColor: '#3498db' }} 
     >
       <Tab.Screen
         name="Feed"
@@ -32,7 +53,7 @@ const HomeScreen = () => {
         }}
       />
       <Tab.Screen
-        name="Notifications"
+        name="Categories"
         component={Categories}
         options={{
           tabBarLabel: 'Categories',
@@ -42,7 +63,7 @@ const HomeScreen = () => {
         }}
       />
       <Tab.Screen
-        name="Profile"
+        name="Favourites"
         component={Fav}
         options={{
           tabBarLabel: 'Favourites',
@@ -51,9 +72,9 @@ const HomeScreen = () => {
           ),
         }}
       />
-       <Tab.Screen
+      <Tab.Screen
         name="Cart"
-        component={cart}
+        component={Cart}
         options={{
           tabBarLabel: 'Cart',
           tabBarIcon: ({ color }) => (
@@ -61,29 +82,44 @@ const HomeScreen = () => {
           ),
         }}
       />
+      {(userRole === 'admin' || userRole === 'manager') && ( 
+        <Tab.Screen
+          name="UpdateProduct"
+          component={UpdateProductTab} 
+          options={{
+            tabBarLabel: 'Update Product',
+            tabBarIcon: ({ color }) => (
+              <MaterialCommunityIcons name="pencil" color={color} size={26} />
+            ),
+          }}
+        />
+      )}
+      {userRole === 'admin' && (
+        <Tab.Screen
+          name="Users"
+          component={UsersTab}
+          options={{
+            tabBarLabel: 'Users',
+            tabBarIcon: ({ color }) => (
+              <MaterialCommunityIcons name="account-group" color={color} size={26} />
+            ),
+          }}
+        />
+      )}
     </Tab.Navigator>
   );
-}
-
-export default HomeScreen;
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center'
-  },
-   button: {
-    backgroundColor: '#0782F9',
-    width: '60%',
-    padding: 15,
-    borderRadius: 10,
     alignItems: 'center',
-    marginTop: 40,
   },
-  buttonText: {
-    color: 'white',
-    fontWeight: '700',
-    fontSize: 16,
+  text: {
+    fontSize: 18,
+    fontWeight: 'bold',
   },
-})
+});
+
+export default HomeScreen;
